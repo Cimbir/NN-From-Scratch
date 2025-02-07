@@ -39,7 +39,7 @@ mutex threadsDoneMtx[THREAD_AMOUNT];
 #define Data_Entry pair<Vec, Vec>
 
 // Neural Network Structure
-vector<int> sizes = {2,10,10,2};
+vector<int> sizes = {2,20,20,20,2};
 int layer_n = sizes.size()-1;
 
 Net weights(layer_n);
