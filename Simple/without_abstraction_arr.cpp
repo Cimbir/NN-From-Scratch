@@ -1,5 +1,4 @@
 #include <iostream>
-#include <vector>
 #include <algorithm>
 #include <string>
 #include <cmath>
@@ -8,15 +7,16 @@
 #include <thread>
 #include <mutex>
 #include <functional>
+#include <iomanip>
 
 using namespace std;
 
 // ================== Global Variables ==================
 
 // Neural Network Architecture
-#define Vec vector<double>
-#define Mat vector<Vec>
-#define Net vector<Mat>
+#define Vec double*
+#define Mat Vec*
+#define Net Mat*
 
 // Threading
 #define THREAD_AMOUNT 2
@@ -39,20 +39,19 @@ mutex threadsDoneMtx[THREAD_AMOUNT];
 #define Data_Entry pair<Vec, Vec>
 
 // Neural Network Structure
-vector<int> sizes = {2,20,20,20,2};
-int layer_n = sizes.size()-1;
+int layer_n = 4;
+int layer_sz[] = {2,20,20,20,2};
 
-Net weights(layer_n);
+Net weights;
 
-vector<Vec> beforeActivation(layer_n);
-vector<Vec> afterActivation(layer_n);
-
-vector<Vec> delta(layer_n);
+Vec* beforeActivation;
+Vec* afterActivation;
+Vec* delta;
 
 // Activation
 
-#define _relu 0
-#define _sigmoid 1
+#define _relu 1
+#define _sigmoid 0
 #define _activation 0 
 
 // ================== Function Definitions ==================
@@ -76,24 +75,26 @@ double activation(double x);
 double activation_d(double x, double y);
 
 // Neural Network Functions
+Vec add_bias(Vec v);
 Vec forward(Vec input);
 void backward(Vec input, Vec result, double lr);
-void train(vector<Data_Entry>& dataset, int epochs, double& lr);
+void train(Data_Entry* dataset, int n, int epochs, double& lr);
 void init_network();
 
 // Setup
 void init();
 
 // Data
-vector<Data_Entry> getCircleData(int n, int w, int h, double x, double y, double r);
+Data_Entry* getCircleData(int n, int w, int h, double x, double y, double r);
 
 // ================== Utils ==================
 
-string to_string(Vec& v){
+string to_string(Vec v, int n){
     string res = "[";
-    for(int i = 0; i < v.size(); i++){
+    for(int i = 0; i < n; i++){
+        //res += to_string(v[i]).substr(0, to_string(v[i]).find(".") + 3);
         res += to_string(v[i]);
-        if(i < v.size() - 1){
+        if(i < n - 1){
             res += ", ";
         }
     }
@@ -101,11 +102,11 @@ string to_string(Vec& v){
     return res;
 }
 
-string to_string(Mat& m){
+string to_string(Mat ma, int n, int m){
     string res = "[";
-    for(int i = 0; i < m.size(); i++){
-        res += to_string(m[i]);
-        if(i < m.size() - 1){
+    for(int i = 0; i < n; i++){
+        res += to_string((Vec)ma[i],m);
+        if(i < n - 1){
             res += ",\n";
         }
     }
@@ -113,11 +114,11 @@ string to_string(Mat& m){
     return res;
 }
 
-string to_string(Net& n){
+string to_string(Net n, int* sizes, int am){
     string res = "[";
-    for(int i = 0; i < n.size(); i++){
-        res += to_string(n[i]);
-        if(i < n.size() - 1){
+    for(int i = 0; i < am; i++){
+        res += to_string(n[i], sizes[i+1], sizes[i]);
+        if(i < am - 1){
             res += ",\n";
         }
     }
@@ -196,114 +197,100 @@ double activation_d(double x, double y){
 
 // ================== Neural Network Functions ==================
 
+Vec add_bias(Vec v, int n){
+    Vec res = new double[n+1];
+    for(int i = 0; i < n; i++){
+        res[i] = v[i];
+    }
+    res[n] = 1;
+    return res;
+}
+
 Vec forward(Vec input) {
-    input.push_back(1);    
-    for(int i = 0; i < weights.size(); i++){
-        Mat& w = weights[i];
-        Vec new_res(w.size());
-        for(int j = 0; j < w.size(); j++){
+    input = add_bias(input, layer_sz[0]);
+    for(int i = 0; i < layer_n; i++){
+        for(int j = 0; j < layer_sz[i+1]; j++){
             double sum = 0;
-            for(int k = 0; k < w[j].size(); k++){
-                sum += w[j][k] * input[k];
+            for(int k = 0; k < layer_sz[i]; k++){
+                double f = weights[i][j][k];
+                double s = input[k];
+                sum += f * s;
             }
             beforeActivation[i][j] = sum;
-            new_res[j] = activation(sum);
-            afterActivation[i][j] = new_res[j];
+            afterActivation[i][j] = activation(sum);
         }
-        input = new_res;
+        input = afterActivation[i];
     }
     return input;
 }
 
 void backward(Vec input, Vec result, double lr = 1) {
     Vec output = forward(input);
-    input.push_back(1);
+    input = add_bias(input, layer_sz[0]);
 
     // Update deltas
-    for(int i = 0; i < delta[layer_n-1].size(); i++){
+    for(int i = 0; i < layer_sz[layer_n]; i++){
         delta[layer_n-1][i] = activation_d(beforeActivation[layer_n-1][i], afterActivation[layer_n-1][i]) * (result[i] - output[i]);
     }
-    if(PARALLEL_DELTA_UPDATE){
-        parallel_for(layer_n-1, [&](int i){
-            for(int j = 0; j < delta[i].size(); j++){
-                double sum = 0;
-                for(int k = 0; k < delta[i+1].size(); k++){
-                    sum += delta[i+1][k] * weights[i+1][k][j];
-                }
-                delta[i][j] = activation_d(beforeActivation[i][j], afterActivation[i][j]) * sum;
+    for(int i = layer_n-2; i >= 0; i--){
+        for(int j = 0; j < layer_sz[i+1]; j++){
+            double sum = 0;
+            for(int k = 0; k < layer_sz[i+2]; k++){
+                sum += delta[i+1][k] * weights[i+1][k][j];
             }
-        });
-    }else{
-        for(int i = layer_n-2; i >= 0; i--){
-            for(int j = 0; j < delta[i].size(); j++){
-                double sum = 0;
-                for(int k = 0; k < delta[i+1].size(); k++){
-                    sum += delta[i+1][k] * weights[i+1][k][j];
-                }
-                delta[i][j] = activation_d(beforeActivation[i][j], afterActivation[i][j]) * sum;
-            }
+            delta[i][j] = activation_d(beforeActivation[i][j], afterActivation[i][j]) * sum;
         }
     }
 
     // Update weights
-    if(PARALLEL_WEIGHT_UPDATE){
-        parallel_for(layer_n, [&](int i){
-            for(int j = 0; j < weights[i].size(); j++){
-                for(int k = 0; k < weights[i][j].size(); k++){
-                    if(i == 0){
-                        weights[i][j][k] += lr * delta[i][j] * input[k];
-                    }else{
-                        weights[i][j][k] += lr * delta[i][j] * afterActivation[i-1][k];
-                    }
-                }
-            }
-        });
-    }else{
-        for(int i = 0; i < layer_n; i++){
-            for(int j = 0; j < weights[i].size(); j++){
-                for(int k = 0; k < weights[i][j].size(); k++){
-                    if(i == 0){
-                        weights[i][j][k] += lr * delta[i][j] * input[k];
-                    }else{
-                        weights[i][j][k] += lr * delta[i][j] * afterActivation[i-1][k];
-                    }
+    for(int i = 0; i < layer_n; i++){
+        for(int j = 0; j < layer_sz[i+1]; j++){
+            for(int k = 0; k < layer_sz[i]; k++){
+                if(i == 0){
+                    weights[i][j][k] += lr * delta[i][j] * input[k];
+                }else{
+                    weights[i][j][k] += lr * delta[i][j] * afterActivation[i-1][k];
                 }
             }
         }
     }
 }
 
-void train(vector<Data_Entry>& dataset, int epochs, double& lr) {
+void train(Data_Entry* dataset, int n, int epochs, double& lr) {
     for(int i = 0; i < epochs; i++){
-        for(int j = 0; j < dataset.size(); j++){
+        for(int j = 0; j < n; j++){
             backward(dataset[j].first, dataset[j].second, lr);
         }
-        if(i % 50 == 0)
-            lr *= 0.99;
+        if(i % 50 == 0) lr *= 0.99;
     }
 }
 
 void init_network() {
+    weights = new Mat[layer_n];
+
+    beforeActivation = new Vec[layer_n];
+    afterActivation = new Vec[layer_n];
+    delta = new Vec[layer_n];
+
+    layer_sz[0]++; // For bias
     for(int i = 0; i < layer_n; i++){
         // Weights
-        weights[i] = Mat(sizes[i+1]);
-        for(int j = 0; j < sizes[i+1]; j++){
-            // (i==0) is for bias
-            int len = sizes[i]+(i==0);
-            weights[i][j] = Vec(len);
-            for(int k = 0; k < len; k++){
+        weights[i] = new Vec[layer_sz[i+1]];
+        for(int j = 0; j < layer_sz[i+1]; j++){
+            weights[i][j] = new double[layer_sz[i]];
+            for(int k = 0; k < layer_sz[i]; k++){
                 weights[i][j][k] = (rand() % 100) / 100.0;
             }
         }
 
         // Before Activation
-        beforeActivation[i] = Vec(sizes[i+1]);
+        beforeActivation[i] = new double[layer_sz[i+1]];
 
         // After Activation
-        afterActivation[i] = Vec(sizes[i+1]);
+        afterActivation[i] = new double[layer_sz[i+1]];
 
         // Delta
-        delta[i] = Vec(sizes[i+1]);
+        delta[i] = new double[layer_sz[i+1]];
     }
 }
 
@@ -317,16 +304,20 @@ void init(){
 
 // ================== Data ==================
 
-vector<Data_Entry> getCircleData(int n, int w, int h, double x, double y, double r){
-    vector<Data_Entry> res(n);
+Data_Entry* getCircleData(int n, int w, int h, double x, double y, double r){
+    Data_Entry* res = new Data_Entry[n];
     for(int i = 0; i < n; i++){
         double cx = (rand() % 1000) * (double)w / 1000;
         double cy = (rand() % 1000) * (double)h / 1000;
 
         double dist = sqrt((cx-x)*(cx-x) + (cy-y)*(cy-y));
 
-        Vec input = {cx, cy};
-        Vec output = {dist <= r ? 1.0 : 0.0, dist > r ? 1.0 : 0.0};
+        Vec input = new double[2];
+        input[0] = cx;
+        input[1] = cy;
+        Vec output = new double[2];
+        output[0] = dist <= r ? 1.0 : 0.0;
+        output[1] = dist > r ? 1.0 : 0.0;
 
         res[i] = {input, output};
     }
@@ -339,28 +330,31 @@ int main(){
 
     // training data
     // 1000 data points, circle with radius 3, center at (5,5)
-    vector<Data_Entry> training_data = getCircleData(1000, 10, 10, 5, 5, 3);
+    int training_n = 1000;
+    Data_Entry* training_data = getCircleData(training_n, 10, 10, 5, 5, 3);
     // testing data
-    vector<Data_Entry> test_data = getCircleData(100, 10, 10, 5, 5, 3);
+    int testing_n = 10;
+    Data_Entry* testing_data = getCircleData(testing_n, 10, 10, 5, 5, 3);
 
-    double lr = 0.1;
+    double lr = 1;
+    int epochs = 100;
 
     while(true){
         auto startTime = chrono::high_resolution_clock::now();
-        train(training_data, 100, lr);
+        train(training_data, training_n, epochs, lr);
         auto endTime = chrono::high_resolution_clock::now();
         auto trainingTime = chrono::duration_cast<chrono::milliseconds>(endTime-startTime).count();
 
         cout << "took " << trainingTime << " milliseconds" << endl;
-
+        cout << "lr: " << lr << endl;
         for(int i = 0; i < 10; i++){
-            Data_Entry& entry = test_data[i];
-            Vec& input = entry.first;
-            Vec& output = entry.second;
+            Data_Entry entry = testing_data[i];
+            Vec input = entry.first;
+            Vec output = entry.second;
             Vec res = forward(input);
-            cout << "Input: " << to_string(input);
-            cout << " | Expected: " << to_string(output);
-            cout << " | Got: " << to_string(res) << endl;
+            cout << "Input: " << to_string(input, layer_sz[0]-1);
+            cout << " | Expected: " << to_string(output, layer_sz[layer_n]);
+            cout << " | Got: " << to_string(res, layer_sz[layer_n]) << endl;
         }
         for(int i = 0; i < 100; i++) cout << "=";
         cout << endl;

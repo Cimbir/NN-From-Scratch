@@ -182,7 +182,7 @@ vector<entry> circleData(double range, double x, double y, double r, int amount)
 
 int main(){
     srand(time(0));
-    NeuralNetwork nn({2, 20, 2});
+    NeuralNetwork nn({2, 10, 10, 2});
 
     vector<entry> trainingData = circleData(10, 5, 5, 3, 1000);
     vector<entry> testData = circleData(10, 5, 5, 3, 10);

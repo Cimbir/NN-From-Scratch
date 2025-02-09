@@ -70,8 +70,6 @@ void Matrix::mult(Matrix& m, Matrix& res) {
     }
     for(int i = 0; i < n; i++){
         for(int j = 0; j < m.size(1); j++){
-            // cout << res(i, j) << " ";
-            // cout << (*this)(i, j) << endl;
             res(i, j) = (*this)(i, j) * m(i, j);
         }
     }
