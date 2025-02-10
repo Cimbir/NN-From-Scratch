@@ -3,6 +3,7 @@
 #include <vector>
 #include <array>
 #include <SFML/Graphics.hpp>
+#include <SFML/Graphics/Font.hpp>
 
 #include "../FastNN/FNN.hpp"
 
@@ -22,6 +23,8 @@ using namespace sf;
 #define NETWORK_WIDTH 800
 #define NETWORK_HEIGHT 800
 
+#define SHOW_DATA 0
+
 point data_to_left(point data, double w, double h){
     return {(data.first / w) * GRAPH_WIDTH, (data.second / h) * GRAPH_HEIGHT};
 }
@@ -31,8 +34,8 @@ point data_to_left(Vec data, double w, double h){
 
 Color get_weight_color(double weight){
     return Color{
-        min(255.0, max(0.0, 10 * weight)),
-        min(255.0, max(0.0, -10 * weight)),
+        (Uint8)min(255.0, max(0.0, 20 * weight)),
+        (Uint8)min(255.0, max(0.0, -20 * weight)),
         10,
     };
 }
@@ -78,7 +81,7 @@ int main(){
 
     int training_n = 1000;
     Data_Entry* training_data = getCircleData(training_n, w, h, x, y, r);
-    int testing_n = 50;
+    int testing_n = 1000;
     Data_Entry* testing_data = getCircleData(testing_n, w, h, x, y, r);
 
 
@@ -96,8 +99,8 @@ int main(){
     circle.setPosition(circle_center.first - circle_radius, circle_center.second - circle_radius);
     
     vector<CircleShape> data_circles;
-    for(int i = 0; i < training_n; i++){
-        point p = data_to_left(training_data[i].first, w, h);
+    for(int i = 0; i < testing_n; i++){
+        point p = data_to_left(testing_data[i].first, w, h);
         CircleShape pt(2);
         pt.setPosition(p.first-2, p.second-2);
         data_circles.push_back(pt);
@@ -142,6 +145,17 @@ int main(){
         }
     }
 
+    Font font;
+    if(!font.loadFromFile("arial.ttf")){
+        cout << "Font not found" << endl;
+        return 1;
+    }
+    Text loss_text;
+    loss_text.setFont(font);
+    loss_text.setCharacterSize(24);
+    loss_text.setFillColor(Color::White);
+    loss_text.setPosition(GRAPH_WIDTH + 10, 10);
+
 
 
     // run the program as long as the window is open
@@ -165,20 +179,24 @@ int main(){
         circle.setPosition(circle_center.first - circle_radius, circle_center.second - circle_radius);
         window.draw(circle);
 
-        for(int i = 0; i < training_n; i++){
-            Vec input = training_data[i].first;
+        double cur_loss = 0;
+        for(int i = 0; i < testing_n; i++){
+            Vec input = testing_data[i].first;
             Vec output = nn.forward(input);
 
-            if(i < 10){
+            if(i < 10 && SHOW_DATA){
                 cout << "Input: " << to_string(input, 2);
-                cout << " | Expected: " << to_string(training_data[i].second, 2);
+                cout << " | Expected: " << to_string(testing_data[i].second, 2);
                 cout << " | Got: " << to_string(output, 2) << endl;
             }
+
+            cur_loss += nn.loss(output, testing_data[i].second);
             
             if(output[0] > output[1])   data_circles[i].setFillColor(Color::Green); // In
             else                        data_circles[i].setFillColor(Color::Red);   // Out
             window.draw(data_circles[i]);
         }
+        cur_loss /= testing_n;
 
         // draw separating line in the middle
         window.draw(middle_line, 2, Lines);
@@ -201,6 +219,9 @@ int main(){
                 }
             }
         }
+
+        loss_text.setString("Loss: " + to_string(cur_loss));
+        window.draw(loss_text);
 
 
 

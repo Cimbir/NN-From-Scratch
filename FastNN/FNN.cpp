@@ -178,3 +178,13 @@ void FNN::train(Data_Entry* dataset, int n, int epochs, double& lr){
         if(e % 50 == 0) lr *= 0.99;
     }
 }
+
+
+
+double FNN::loss(Vec output, Vec expected){
+    double res = 0;
+    for(int i = 0; i < layer_sz[layer_n]; i++){
+        res += (output[i] - expected[i]) * (output[i] - expected[i]);
+    }
+    return res / layer_sz[layer_n];
+}

@@ -66,6 +66,9 @@ Vec* delta;
     Vec forward(Vec input);
     void backward(Vec input, Vec result, double lr);
     void train(Data_Entry* dataset, int n, int epochs, double& lr);
+
+    // Loss
+    double loss(Vec output, Vec expected);
 };
 
 #endif
