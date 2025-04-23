@@ -34,3 +34,7 @@ On the right is the visual representation of the model, with the nodes and weigh
 This is the folder where I tried out and tested different snippets of code which I then implemented in the solutions. I mostly used this to write threads which would always be active but asleep most of the time and would wake up when the main program would request something to be done. However, as mentioned above, it only made the solutions slower, so I dropped it
 
 Another part I wanted to implement was doing simple operations on the GPU, but the Nvidia driver version and CUDA supported version didn't match and the driver isn't getting an upgrade any time soon, so the only option left is to use opengl
+
+# P.S.
+
+Requires sfml-2.6.0 version. download from [here](https://archive.archlinux.org/packages/s/sfml/)
